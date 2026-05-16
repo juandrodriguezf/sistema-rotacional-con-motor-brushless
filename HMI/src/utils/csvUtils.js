@@ -1,6 +1,6 @@
 /**
  * Generates and triggers download of a CSV file from recorded session data.
- * @param {Array} dataBuffer - Array of {time, sp, fb, err, out} objects.
+ * @param {Array} dataBuffer - Array of {time, sp, fb, err, out, ctrlk} objects.
  */
 export function downloadCSV(dataBuffer) {
   if (!dataBuffer || dataBuffer.length === 0) {
@@ -8,9 +8,9 @@ export function downloadCSV(dataBuffer) {
     return;
   }
 
-  const header = 'Time_ms,Setpoint_Deg,Feedback_Deg,Error,PWM_Output\n';
+  const header = 'Time_ms,Setpoint_Deg,Feedback_Deg,Error,PWM_Output,CTRLK_mV\n';
   const rows = dataBuffer
-    .map((d) => `${d.time.toFixed(2)},${d.sp},${d.fb},${d.err},${d.out}`)
+    .map((d) => `${d.time.toFixed(2)},${d.sp},${d.fb},${d.err},${d.out},${d.ctrlk ?? 0}`)
     .join('\n');
 
   const csvContent = header + rows;
@@ -34,7 +34,7 @@ export function downloadCSV(dataBuffer) {
 }
 
 /**
- * Parses a CSV line from PIC: "sp,fb,err,out"
+ * Parses a CSV line from PIC: "sp,fb,err,out" or "sp,fb,err,out,ctrlk_mv"
  * @param {string} line - Raw CSV string
  * @returns {object|null} Parsed data object or null if invalid.
  */
@@ -46,8 +46,9 @@ export function parseCSVLine(line) {
   const fb = parseInt(parts[1], 10);
   const err = parseInt(parts[2], 10);
   const out = parseInt(parts[3], 10);
+  const ctrlk = parts.length >= 5 ? parseInt(parts[4], 10) : null;
 
   if ([sp, fb, err, out].some(isNaN)) return null;
 
-  return { sp, fb, err, out };
+  return { sp, fb, err, out, ctrlk: isNaN(ctrlk) ? null : ctrlk };
 }

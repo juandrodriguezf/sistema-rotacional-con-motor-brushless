@@ -37,6 +37,7 @@
 29. [Anti-Windup](https://claude.ai/chat/f5558bce-50e2-421e-9d98-6c6159d45452#29-anti-windup)
 30. [Recomendaciones PCB](https://claude.ai/chat/f5558bce-50e2-421e-9d98-6c6159d45452#30-recomendaciones-pcb)
 31. [Resumen Final del Sistema](https://claude.ai/chat/f5558bce-50e2-421e-9d98-6c6159d45452#31-resumen-final-del-sistema)
+32. [Diagrama de Arquitectura Completo](https://claude.ai/chat/f5558bce-50e2-421e-9d98-6c6159d45452#32-diagrama-de-arquitectura-completo)
 
 ---
 
@@ -110,11 +111,19 @@ Recomendaciones:
 
 RA2 se utiliza como salida de referencia analógica FVR:
 
-> V_FVR = 2.048V
+> V_FVR = 2.048V (configuración actual: ganancia 2x)
+
+**Niveles disponibles:**
+
+| Ganancia | Voltaje | Precisión | VDD mínimo |
+|----------|---------|-----------|------------|
+| 1x | 1.024V | ±4% | 2.5V |
+| 2x | 2.048V | ±4% | 2.5V |
+| 4x | 4.096V | ±5% | 4.75V |
 
 **Funciones:**
 
-1. Referencia ADC interna
+1. Referencia ADC interna (VREF+)
 2. Alimentación analógica de ambos potenciómetros
 
 **Ventajas:**
@@ -124,11 +133,24 @@ RA2 se utiliza como salida de referencia analógica FVR:
 * Eliminación de errores por variación VDD
 * Conversión ADC lineal y estable
 
+**Notas:**
+
+* Tiempo de estabilización al habilitar: ~60 µs
+* Consumo del módulo FVR: ~40-46 µA (típico a 3V)
+* La salida FVR no puede exceder VDD
+
 ---
 
 ## 5. Potenciómetros
 
 Ambos potenciómetros trabajan entre  **0V → 2.048V** , alimentados directamente desde RA2/FVR.
+
+**Especificaciones:**
+
+* Valor: 10kΩ
+* Tipo: 1 vuelta (~270-300° mecánicos)
+* Corriente por potenciómetro: 2.048V / 10kΩ ≈ 205 µA
+* Corriente total (2 pots): ≈ 410 µA
 
 **Arquitectura general:**
 
@@ -223,11 +245,20 @@ RC0 funciona como:
 * Salida PWM
 * DAC analógico implementado por software
 
+**Especificaciones:**
+
+* Voltaje de salida: 0V → VDD (5V) según duty cycle
+* Frecuencia PWM: 31.25kHz (TMR2, PR2=255, clock FOSC/4)
+* Resolución: 8 bits (0-255)
+* Período TMR2: 32 µs
+
 **Cadena completa:**
 
 ```
 RC0 PWM → Filtro RC → MCP6002 → CTRL
 ```
+
+**Nota:** El PWM oscila entre 0V y VDD(5V). La FVR no afecta esta salida.
 
 ---
 
@@ -236,18 +267,25 @@ RC0 PWM → Filtro RC → MCP6002 → CTRL
 **Componentes:**
 
 * R3 = 13kΩ
-* C ≈ 100nF
+* C = 100nF
 
 **Frecuencia de corte:**
 
 ```
-fc = 1 / (2π·RC) ≈ 120Hz
+fc = 1 / (2π·R·C) = 1 / (2π × 13kΩ × 100nF) ≈ 122 Hz
+```
+
+**Constante de tiempo:**
+
+```
+τ = R·C = 13kΩ × 100nF = 1.3 ms
+t_settling (5τ) ≈ 6.5 ms
 ```
 
 **Objetivos:**
 
-* Convertir PWM en voltaje DC
-* Reducir ripple
+* Convertir PWM de 31.25kHz en voltaje DC
+* Reducir ripple residual
 * Suavizar señal CTRL
 * Introducir amortiguamiento adicional al sistema
 
@@ -255,7 +293,13 @@ fc = 1 / (2π·RC) ≈ 120Hz
 
 ## 11. Buffer de Salida CTRL
 
-MCP6002 configurado como  **seguidor de tensión** .
+MCP6002 configurado como  **seguidor de tensión**  (ganancia = 1×).
+
+**Conexión:**
+
+```
+Filtro RC → MCP6002(+)  MCP6002(out) → MCP6002(-)  → CTRL
+```
 
 **Funciones:**
 
@@ -264,16 +308,30 @@ MCP6002 configurado como  **seguidor de tensión** .
 * Entregar baja impedancia al driver
 * Evitar carga sobre el filtro
 
+**Especificaciones relevantes:**
+
+* Alimentación: VDD = 5V
+* Configuración: seguidor (VOUT conectado a VIN-)
+* Salida rail-to-rail: VSS+25mV a VDD-25mV
+
 ---
 
 ## 12. CTRL — Driver ZSX11H
 
 La señal CTRL recibe el voltaje analógico generado por PWM.
 
+**Especificaciones del driver:**
+
+* Rango de entrada CTRL: 0V → 5V
+* Alimentación principal (VCC): 6-60VDC
+* Jumper J1: debe estar soldado para control externo
+
 **Función:**
 
 * Acción de control del PID
 * Control de potencia/salida del ZSX11H
+
+**Nota:** El voltaje en CTRL proviene del filtro RC + MCP6002, no directamente del PWM.
 
 ---
 
@@ -285,15 +343,17 @@ RC1 genera la  **señal digital DIR** .
 
 Conectado a: entrada DIR del driver ZSX11H.
 
+**Lógica: active LOW**
+
+| Estado | Nivel | Dirección |
+|--------|-------|-----------|
+| Normal | HIGH (3.3V-5V) o flotante | Dirección por defecto |
+| Inversa | LOW (0V / GND) | Dirección opuesta |
+
 **Funciones:**
 
 * Definir dirección del movimiento
 * Control de sentido del actuador
-
-**Estados:**
-
-* `HIGH` → Dirección positiva
-* `LOW` → Dirección negativa
 
 ---
 
@@ -381,9 +441,23 @@ Uso: GPIO auxiliar
 
 **Configuraciones utilizadas:**
 
-1. Buffer entrada setpoint
-2. Buffer entrada feedback
-3. Buffer salida CTRL
+1. Buffer entrada setpoint (seguidor, U1A)
+2. Buffer entrada feedback (seguidor, U1B)
+3. Buffer salida CTRL (seguidor, U2A o U2B)
+
+**Especificaciones:**
+
+| Parámetro | Valor |
+|-----------|-------|
+| Alimentación (VDD) | 1.8V → 5.5V |
+| GBWP | 1.0 MHz |
+| Slew Rate | 0.6 V/µs |
+| Corriente reposo (por amp) | 100 µA (típico) |
+| Corriente salida | ±23 mA (a 5.5V) |
+| Swing de salida | VSS+25mV → VDD-25mV |
+| Entrada | Rail-to-rail (VSS-300mV → VDD+300mV) |
+| Fase márgen | 90° (G=+1) |
+| Estabilidad cargas capacitivas | Estable hasta 500pF (G=+1) |
 
 **Ventajas:**
 
@@ -507,12 +581,25 @@ El **duty PWM** representa la salida digital PID, mientras que el **filtro RC** 
 
 La práctica exige transmisión serial a la frecuencia de muestreo.
 
-**Datos enviados:**
+**Formato de datos (CSV):**
 
-* Setpoint
-* Posición actual
-* Error
-* Salida PID
+```
+sp_deg,fb_deg,error,pwm_output,ctrlk_mv\r\n
+```
+
+| Campo | Descripción | Rango |
+|-------|-------------|-------|
+| sp_deg | Setpoint en grados | 0-360 |
+| fb_deg | Feedback en grados | 0-360 |
+| error | Diferencia SP - FB | ±360 |
+| pwm_output | Duty cycle PID | -255 → +255 |
+| ctrlk_mv | Voltaje estimado en CTRLK | 0-2048 mV |
+
+**Ejemplo:**
+
+```
+45,30,15,75,150\r\n
+```
 
 **Frecuencia de transmisión:** 120Hz
 
@@ -601,3 +688,46 @@ El sistema implementa un lazo cerrado PID de posición angular utilizando:
 * Control digital DIR
 * Driver externo ZSX11H
 * Control discreto a 120Hz
+
+---
+
+## 32. Diagrama de Arquitectura Completo
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        PIC16F18426 @ 32MHz                       │
+│                                                                  │
+│  VDD(5V) ──┬── Todo el circuito digital                         │
+│            ├── MCP6002 VDD                                       │
+│            └── UART, PWM, DIR, etc.                              │
+│                                                                  │
+│  RA2 ── FVR 2.048V ──┬── POT1(10k) ── MCP6002-A ── RC3 (ADC)  │
+│                      └── POT2(10k) ── MCP6002-B ── RC2 (ADC)  │
+│                                                                  │
+│  RC0 ── PWM 31.25kHz ── R3(13k) + C(100nF) ── MCP6002 ── CTRL │
+│                                                                  │
+│  RC1 ── DIR ─────────────────────────────────────────── DIR    │
+│                                                                  │
+│  RC4 ── UART TX ─────────────────────────── USB_SERIAL          │
+│  RC5 ── UART RX ─────────────────────────── USB_SERIAL          │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│                     Driver ZSX11H                                │
+│                                                                  │
+│  CTRL ← MCP6002 (0-5V DC)                                       │
+│  DIR  ← RC1 (HIGH=CW, LOW=CCW)                                  │
+│  VCC  ← 6-60VDC (motor power)                                   │
+│  J1   ← Soldado (control externo habilitado)                    │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Separación de dominios de voltaje:**
+
+| Dominio | Voltaje | Componentes |
+|---------|---------|-------------|
+| FVR | 2.048V | Solo referencia ADC + alimentación de pots |
+| VDD | 5V | PIC, MCP6002, UART, PWM, DIR |
+| VCC | 6-60VDC | Driver ZSX11H, motor BLDC |
+
+**Nota importante:** El PWM oscila entre 0V y VDD(5V), NO entre 0V y FVR. La FVR solo afecta las entradas ADC, no la salida PWM.

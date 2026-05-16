@@ -45,6 +45,7 @@
 #include <stdlib.h>
 
 #define FVR_VOLTAGE     2048
+#define VDD_MV          5000
 #define ADC_MAX         1023
 
 #define SP_ADC_0    0
@@ -53,6 +54,10 @@
 #define FB_ADC_360  1023
 
 #define PWM_MAX         255
+
+// Rate limiting: max duty change per PID cycle
+// RC filter tau=1.3ms, Ts=8.33ms → max ~40% change per cycle is safe
+#define OUTPUT_MAX_DELTA 100
 
 // --- PARÁMETROS PID DINÁMICOS (Modificables vía HMI) ---
 volatile int16_t kp_val = 50;
@@ -74,11 +79,13 @@ static int16_t adc_to_degrees(uint16_t adc_raw, int16_t adc_0, int16_t adc_360)
 
 static int32_t integral = 0;
 static int16_t prev_error = 0;
+static int32_t prev_scaled = 0;
 
 static int16_t tel_setpoint_deg = 0;
 static int16_t tel_feedback_deg = 0;
 static int16_t tel_error = 0;
 static int16_t tel_output = 0;
+static int16_t tel_ctrlk_mv = 0;
 static volatile bool tel_ready = false;
 
 static void PID_ISR(void)
@@ -103,8 +110,15 @@ static void PID_ISR(void)
 
     int32_t scaled = output / 100;
 
+    // Rate limiting: limitar cambio entre ciclos para respetar dinámica del filtro RC
+    int32_t delta = scaled - prev_scaled;
+    if (delta > OUTPUT_MAX_DELTA) scaled = prev_scaled + OUTPUT_MAX_DELTA;
+    else if (delta < -OUTPUT_MAX_DELTA) scaled = prev_scaled - OUTPUT_MAX_DELTA;
+
     if (scaled > PWM_MAX) scaled = PWM_MAX;
     if (scaled < -PWM_MAX) scaled = -PWM_MAX;
+
+    prev_scaled = scaled;
 
     int16_t duty = (int16_t)scaled;
 
@@ -123,6 +137,8 @@ static void PID_ISR(void)
     tel_feedback_deg = fb_deg;
     tel_error = error;
     tel_output = (int16_t)scaled;
+    // Voltaje estimado en CTRLK: V = (|duty|/255) × VDD(5V)
+    tel_ctrlk_mv = (int16_t)(((int32_t)(duty > 0 ? duty : -duty) * VDD_MV) / PWM_MAX);
     tel_ready = true;
 }
 
@@ -176,6 +192,10 @@ static void send_csv(void)
     buf[len++] = ',';
 
     int_to_str(tel_output, tmp, sizeof(tmp));
+    for (uint8_t i = 0; tmp[i] != '\0'; i++) buf[len++] = tmp[i];
+    buf[len++] = ',';
+
+    int_to_str(tel_ctrlk_mv, tmp, sizeof(tmp));
     for (uint8_t i = 0; tmp[i] != '\0'; i++) buf[len++] = tmp[i];
 
     buf[len++] = '\r';

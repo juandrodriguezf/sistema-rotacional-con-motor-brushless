@@ -9,17 +9,26 @@ import PwmChart from './components/PwmChart';
 import MetricsBar from './components/MetricsBar';
 import MotorIndicator from './components/MotorIndicator';
 import ThemeToggle from './components/ThemeToggle';
+import PidAnalyzer from './components/PidAnalyzer';
 import './App.css';
 
 const MAX_CHART_POINTS = 600;
+const TARGET_HZ = 120;
+const EMA_ALPHA = 0.1;
 
 export default function App() {
   const [chartData, setChartData] = useState([]);
   const [latestData, setLatestData] = useState(null);
+  const [sampleRate, setSampleRate] = useState(0);
   const [toast, setToast] = useState(null);
   const [theme, setTheme] = useState('dark');
   const dataBufferRef = useRef([]);
   const startTimeRef = useRef(null);
+  const lastTimeRef = useRef(null);
+  const emaHzRef = useRef(TARGET_HZ);
+  const pidParamsRef = useRef({ kp: 50, ki: 10, kd: 0 });
+
+  const getPidParams = useCallback(() => pidParamsRef.current, []);
 
   // Apply theme to document
   useEffect(() => {
@@ -39,11 +48,23 @@ export default function App() {
     const parsed = parseCSVLine(line);
     if (!parsed) return;
 
+    const now = performance.now();
     if (startTimeRef.current === null) {
-      startTimeRef.current = performance.now();
+      startTimeRef.current = now;
     }
 
-    const elapsed = performance.now() - startTimeRef.current;
+    const elapsed = now - startTimeRef.current;
+
+    // Sample rate calculation (EMA smoothed)
+    if (lastTimeRef.current !== null) {
+      const dt = now - lastTimeRef.current;
+      if (dt > 0) {
+        const instantHz = 1000 / dt;
+        emaHzRef.current = EMA_ALPHA * instantHz + (1 - EMA_ALPHA) * emaHzRef.current;
+        setSampleRate(Math.round(emaHzRef.current));
+      }
+    }
+    lastTimeRef.current = now;
 
     const dataPoint = {
       time: elapsed,
@@ -51,6 +72,7 @@ export default function App() {
       fb: parsed.fb,
       err: parsed.err,
       out: parsed.out,
+      ctrlk: parsed.ctrlk,
     };
 
     // Store in full buffer for CSV export
@@ -76,8 +98,11 @@ export default function App() {
   const handleConnect = useCallback(async () => {
     dataBufferRef.current = [];
     startTimeRef.current = null;
+    lastTimeRef.current = null;
+    emaHzRef.current = TARGET_HZ;
     setChartData([]);
     setLatestData(null);
+    setSampleRate(0);
 
     await connect();
     showToast('Puerto serial conectado', 'success');
@@ -101,6 +126,16 @@ export default function App() {
     async (cmd) => {
       await send(cmd);
       showToast(`Enviado: ${cmd.trim()}`, 'info');
+
+      const type = cmd[0];
+      const rest = cmd.slice(1).replace(/[\n\r]/g, '');
+      const val = parseInt(rest);
+      if (!isNaN(val) && (type === 'P' || type === 'I' || type === 'D')) {
+        pidParamsRef.current = {
+          ...pidParamsRef.current,
+          [type === 'P' ? 'kp' : type === 'I' ? 'ki' : 'kd']: val,
+        };
+      }
     },
     [send, showToast]
   );
@@ -155,13 +190,19 @@ export default function App() {
             pwmOutput={latestData?.out}
             isConnected={isConnected}
           />
+          <PidAnalyzer
+            chartData={chartData}
+            getParams={getPidParams}
+            onApply={handleSendPID}
+            isConnected={isConnected}
+          />
         </aside>
 
         {/* Right Content Area */}
         <div className="content-area">
           {/* Metrics Bar */}
           <div className="fade-in" style={{ animationDelay: '0.1s' }}>
-            <MetricsBar latestData={latestData} isConnected={isConnected} />
+            <MetricsBar latestData={latestData} sampleRate={sampleRate} isConnected={isConnected} />
           </div>
 
           {/* Charts Grid */}
