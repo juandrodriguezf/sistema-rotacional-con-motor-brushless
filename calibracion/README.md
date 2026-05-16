@@ -3,7 +3,7 @@
 ## Uso
 
 1. Copie los archivos de `mcc_generated_files/` desde el proyecto principal a esta carpeta (o compile con la misma configuracion MCC).
-2. Programe el PIC con este `main.c`.
+2. Programe el PIC con este `calib_pote.c`.
 3. Abra un terminal serial a 115200 baud.
 4. Siga las instrucciones paso a paso:
    - Posicione cada potenciómetro en 0° y presione una tecla.

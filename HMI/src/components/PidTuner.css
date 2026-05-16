@@ -1,0 +1,74 @@
+.pid-tuner {
+  padding: var(--gap-xl);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-lg);
+}
+
+.pid-params {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-lg);
+}
+
+.pid-param {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-xs);
+}
+
+.pid-param-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap-md);
+}
+
+.pid-param-labels {
+  display: flex;
+  align-items: baseline;
+  gap: var(--gap-sm);
+}
+
+.pid-param-name {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.pid-param-sublabel {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.pid-input {
+  width: 72px !important;
+  text-align: center;
+  padding: 6px 8px !important;
+  font-size: 0.85rem !important;
+}
+
+.pid-input:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+input[type="range"]:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.pid-range-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.pid-tuner .btn-send {
+  width: 100%;
+  margin-top: var(--gap-sm);
+}

@@ -1,0 +1,56 @@
+.connection-panel {
+  padding: var(--gap-xl);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-md);
+}
+
+.connection-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-md);
+  align-items: flex-start;
+}
+
+.port-info {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.connection-hint {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.data-counter {
+  display: flex;
+  align-items: baseline;
+  gap: var(--gap-sm);
+  padding: var(--gap-sm) var(--gap-md);
+  background: var(--bg-deep);
+  border-radius: var(--radius-sm);
+  width: 100%;
+}
+
+.counter-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.counter-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--cyan-300);
+}
+
+.connection-body .btn {
+  width: 100%;
+  padding: 12px;
+  font-size: 0.9rem;
+}

@@ -42,6 +42,7 @@
 */
 
 #include "mcc_generated_files/mcc.h"
+#include <stdlib.h>
 
 #define FVR_VOLTAGE     2048
 #define ADC_MAX         1023
@@ -53,14 +54,16 @@
 
 #define PWM_MAX         255
 
-#define KP              50
-#define KI              10
-#define KD              0
+// --- PARÁMETROS PID DINÁMICOS (Modificables vía HMI) ---
+volatile int16_t kp_val = 50;
+volatile int16_t ki_val = 10;
+volatile int16_t kd_val = 0;
 
 #define INTEGRAL_MAX    5000
 #define INTEGRAL_MIN    -5000
 
 #define CSV_BUFFER_SIZE 64
+#define RX_BUFFER_SIZE  16
 
 static int16_t adc_to_degrees(uint16_t adc_raw, int16_t adc_0, int16_t adc_90)
 {
@@ -95,7 +98,8 @@ static void PID_ISR(void)
     int16_t derivative = error - prev_error;
     prev_error = error;
 
-    int32_t output = (int32_t)KP * error + (int32_t)KI * integral + (int32_t)KD * derivative;
+    // Uso de variables dinámicas kp_val, ki_val, kd_val
+    int32_t output = (int32_t)kp_val * error + (int32_t)ki_val * integral + (int32_t)kd_val * derivative;
 
     int32_t scaled = output / 100;
 
@@ -183,6 +187,21 @@ static void send_csv(void)
     }
 }
 
+// --- PROCESAMIENTO DE COMANDOS HMI ---
+// Comandos: "P100\n", "I5\n", "D1\n"
+void ProcessHmiCommand(char *cmd)
+{
+    char type = cmd[0];
+    int16_t val = (int16_t)atoi(&cmd[1]);
+
+    switch(type) {
+        case 'P': kp_val = val; break;
+        case 'I': ki_val = val; break;
+        case 'D': kd_val = val; break;
+        default: break;
+    }
+}
+
 /*
                          Main application
  */
@@ -195,14 +214,37 @@ void main(void)
 
     TMR0_SetInterruptHandler(PID_ISR);
 
+    char rx_buffer[RX_BUFFER_SIZE];
+    uint8_t rx_idx = 0;
+
     while (1)
     {
+        // 1. Telemetría hacia el HMI
         if (tel_ready) {
             tel_ready = false;
             send_csv();
         }
+
+        // 2. Recepción de comandos desde el HMI
+        if (EUSART1_is_rx_ready()) {
+            char c = EUSART1_Read();
+            
+            // Detectar fin de línea
+            if (c == '\n' || c == '\r') {
+                if (rx_idx > 0) {
+                    rx_buffer[rx_idx] = '\0';
+                    ProcessHmiCommand(rx_buffer);
+                    rx_idx = 0;
+                }
+            } else {
+                // Agregar al buffer si hay espacio
+                if (rx_idx < (RX_BUFFER_SIZE - 1)) {
+                    rx_buffer[rx_idx++] = c;
+                }
+            }
+        }
     }
 }
 /**
- End of File
+  End of File
 */
