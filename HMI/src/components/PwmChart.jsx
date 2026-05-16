@@ -11,8 +11,8 @@ import {
   Filler,
 } from 'chart.js';
 import { Line } from 'react-chartjs-2';
-import { Activity } from 'lucide-react';
-import './RealtimeChart.css';
+import { Zap } from 'lucide-react';
+import './PwmChart.css';
 
 ChartJS.register(
   CategoryScale,
@@ -25,7 +25,7 @@ ChartJS.register(
   Filler
 );
 
-export default function RealtimeChart({ chartData, isConnected, theme }) {
+export default function PwmChart({ chartData, isConnected, theme }) {
   const chartRef = useRef(null);
 
   useEffect(() => {
@@ -46,29 +46,13 @@ export default function RealtimeChart({ chartData, isConnected, theme }) {
     labels,
     datasets: [
       {
-        label: 'Setpoint (Deseado)',
-        data: chartData.map((d) => d.sp),
-        borderColor: theme === 'light' ? '#ea580c' : '#fb923c',
-        backgroundColor: theme === 'light'
-          ? 'rgba(234, 88, 12, 0.06)'
-          : 'rgba(251, 146, 60, 0.08)',
+        label: 'PWM Output',
+        data: chartData.map((d) => d.out),
+        borderColor: '#a78bfa',
+        backgroundColor: 'rgba(167, 139, 250, 0.08)',
         borderWidth: 2,
-        borderDash: [6, 4],
         pointRadius: 0,
-        pointHoverRadius: 4,
-        tension: 0.3,
-        fill: true,
-      },
-      {
-        label: 'Feedback (Medido)',
-        data: chartData.map((d) => d.fb),
-        borderColor: theme === 'light' ? '#1d4ed8' : '#facc15',
-        backgroundColor: theme === 'light'
-          ? 'rgba(30, 64, 175, 0.08)'
-          : 'rgba(250, 204, 21, 0.08)',
-        borderWidth: 2.5,
-        pointRadius: 0,
-        pointHoverRadius: 4,
+        pointHoverRadius: 3,
         tension: 0.3,
         fill: true,
       },
@@ -90,11 +74,7 @@ export default function RealtimeChart({ chartData, isConnected, theme }) {
         align: 'end',
         labels: {
           color: tickColor,
-          font: {
-            family: 'Inter, sans-serif',
-            size: 11,
-            weight: '600',
-          },
+          font: { family: 'Inter, sans-serif', size: 11, weight: '600' },
           usePointStyle: true,
           pointStyle: 'circle',
           padding: 16,
@@ -114,29 +94,15 @@ export default function RealtimeChart({ chartData, isConnected, theme }) {
         borderWidth: 1,
         cornerRadius: 8,
         padding: 10,
-        titleFont: {
-          family: 'JetBrains Mono, monospace',
-          size: 11,
-          weight: '600',
-        },
-        bodyFont: {
-          family: 'JetBrains Mono, monospace',
-          size: 11,
-        },
+        titleFont: { family: 'JetBrains Mono, monospace', size: 11, weight: '600' },
+        bodyFont: { family: 'JetBrains Mono, monospace', size: 11 },
         displayColors: true,
         boxWidth: 8,
         boxHeight: 8,
         usePointStyle: true,
         callbacks: {
-          title: (items) => {
-            if (items.length > 0) {
-              return `t = ${items[0].label}s`;
-            }
-            return '';
-          },
-          label: (context) => {
-            return ` ${context.dataset.label}: ${context.parsed.y}°`;
-          },
+          title: (items) => items.length > 0 ? `t = ${items[0].label}s` : '',
+          label: (ctx) => ` PWM: ${ctx.parsed.y}`,
         },
       },
     },
@@ -147,12 +113,12 @@ export default function RealtimeChart({ chartData, isConnected, theme }) {
           display: true,
           text: 'Tiempo (s)',
           color: tickColor,
-          font: { family: 'Inter, sans-serif', size: 11, weight: '500' },
+          font: { family: 'Inter, sans-serif', size: 10, weight: '500' },
         },
         ticks: {
           color: tickColor,
-          font: { family: 'JetBrains Mono, monospace', size: 10 },
-          maxTicksLimit: 12,
+          font: { family: 'JetBrains Mono, monospace', size: 9 },
+          maxTicksLimit: 10,
           maxRotation: 0,
         },
         grid: { color: gridColor, drawBorder: false },
@@ -162,14 +128,16 @@ export default function RealtimeChart({ chartData, isConnected, theme }) {
         display: true,
         title: {
           display: true,
-          text: 'Ángulo (°)',
+          text: 'PWM',
           color: tickColor,
-          font: { family: 'Inter, sans-serif', size: 11, weight: '500' },
+          font: { family: 'Inter, sans-serif', size: 10, weight: '500' },
         },
+        min: -255,
+        max: 255,
         ticks: {
           color: tickColor,
-          font: { family: 'JetBrains Mono, monospace', size: 10 },
-          callback: (val) => `${val}°`,
+          font: { family: 'JetBrains Mono, monospace', size: 9 },
+          stepSize: 85,
         },
         grid: { color: gridColor, drawBorder: false },
         border: { display: false },
@@ -178,24 +146,17 @@ export default function RealtimeChart({ chartData, isConnected, theme }) {
   };
 
   return (
-    <div className="realtime-chart glass-card">
-      <div className="chart-header">
+    <div className="pwm-chart glass-card">
+      <div className="pwm-chart-header">
         <div className="section-header" style={{ marginBottom: 0 }}>
-          <Activity className="icon" size={16} />
-          <h3>Respuesta Temporal</h3>
+          <Zap className="icon" size={16} style={{ color: '#a78bfa' }} />
+          <h3>Señal PWM</h3>
         </div>
-        {isConnected && (
-          <div className="live-badge">
-            <span className="live-dot"></span>
-            LIVE
-          </div>
-        )}
       </div>
-
-      <div className="chart-container">
+      <div className="pwm-chart-container">
         {chartData.length === 0 ? (
-          <div className="chart-empty">
-            <p>Esperando datos del sistema...</p>
+          <div className="pwm-chart-empty">
+            <p>Esperando datos...</p>
           </div>
         ) : (
           <Line ref={chartRef} data={data} options={options} />

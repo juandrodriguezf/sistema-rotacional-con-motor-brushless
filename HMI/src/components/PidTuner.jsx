@@ -29,7 +29,7 @@ export default function PidTuner({ isConnected, onSend }) {
       param: 'P',
       min: 0,
       max: 200,
-      color: 'var(--cyan-400)',
+      color: 'var(--yellow-400)',
     },
     {
       label: 'Ki',

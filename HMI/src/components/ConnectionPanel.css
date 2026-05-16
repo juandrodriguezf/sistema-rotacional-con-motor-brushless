@@ -46,7 +46,7 @@
   font-family: 'JetBrains Mono', monospace;
   font-size: 1.1rem;
   font-weight: 700;
-  color: var(--cyan-300);
+  color: var(--yellow-300);
 }
 
 .connection-body .btn {

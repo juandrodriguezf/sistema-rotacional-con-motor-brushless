@@ -1,11 +1,14 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { Cpu } from 'lucide-react';
 import useSerial from './hooks/useSerial';
 import { parseCSVLine, downloadCSV } from './utils/csvUtils';
 import ConnectionPanel from './components/ConnectionPanel';
 import PidTuner from './components/PidTuner';
 import RealtimeChart from './components/RealtimeChart';
+import PwmChart from './components/PwmChart';
 import MetricsBar from './components/MetricsBar';
+import MotorIndicator from './components/MotorIndicator';
+import ThemeToggle from './components/ThemeToggle';
 import './App.css';
 
 const MAX_CHART_POINTS = 600;
@@ -14,8 +17,18 @@ export default function App() {
   const [chartData, setChartData] = useState([]);
   const [latestData, setLatestData] = useState(null);
   const [toast, setToast] = useState(null);
+  const [theme, setTheme] = useState('dark');
   const dataBufferRef = useRef([]);
   const startTimeRef = useRef(null);
+
+  // Apply theme to document
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [theme]);
+
+  const toggleTheme = useCallback(() => {
+    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
+  }, []);
 
   const showToast = useCallback((message, type = 'info') => {
     setToast({ message, type });
@@ -61,7 +74,6 @@ export default function App() {
   });
 
   const handleConnect = useCallback(async () => {
-    // Reset state for new session
     dataBufferRef.current = [];
     startTimeRef.current = null;
     setChartData([]);
@@ -74,7 +86,6 @@ export default function App() {
   const handleDisconnect = useCallback(async () => {
     await disconnect();
 
-    // Auto-download CSV
     if (dataBufferRef.current.length > 0) {
       downloadCSV(dataBufferRef.current);
       showToast(
@@ -93,6 +104,15 @@ export default function App() {
     },
     [send, showToast]
   );
+
+  // Determine motor direction
+  const direction = isConnected && latestData
+    ? latestData.out > 0
+      ? 'CW'
+      : latestData.out < 0
+        ? 'CCW'
+        : 'STOP'
+    : '--';
 
   return (
     <div className="app-layout">
@@ -114,6 +134,7 @@ export default function App() {
               Online
             </div>
           )}
+          <ThemeToggle theme={theme} onToggle={toggleTheme} />
         </div>
       </header>
 
@@ -129,6 +150,11 @@ export default function App() {
             dataCount={dataBufferRef.current.length}
           />
           <PidTuner isConnected={isConnected} onSend={handleSendPID} />
+          <MotorIndicator
+            direction={direction}
+            pwmOutput={latestData?.out}
+            isConnected={isConnected}
+          />
         </aside>
 
         {/* Right Content Area */}
@@ -138,9 +164,17 @@ export default function App() {
             <MetricsBar latestData={latestData} isConnected={isConnected} />
           </div>
 
-          {/* Chart */}
-          <div className="chart-wrapper fade-in" style={{ animationDelay: '0.2s' }}>
-            <RealtimeChart chartData={chartData} isConnected={isConnected} />
+          {/* Charts Grid */}
+          <div className="charts-grid fade-in" style={{ animationDelay: '0.2s' }}>
+            {/* Main angle chart */}
+            <div className="chart-main">
+              <RealtimeChart chartData={chartData} isConnected={isConnected} theme={theme} />
+            </div>
+
+            {/* PWM chart */}
+            <div className="chart-pwm">
+              <PwmChart chartData={chartData} isConnected={isConnected} theme={theme} />
+            </div>
           </div>
         </div>
       </main>

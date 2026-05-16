@@ -48,9 +48,9 @@
 #define ADC_MAX         1023
 
 #define SP_ADC_0    0
-#define SP_ADC_90   1023
+#define SP_ADC_360  1023
 #define FB_ADC_0    0
-#define FB_ADC_90   1023
+#define FB_ADC_360  1023
 
 #define PWM_MAX         255
 
@@ -65,11 +65,11 @@ volatile int16_t kd_val = 0;
 #define CSV_BUFFER_SIZE 64
 #define RX_BUFFER_SIZE  16
 
-static int16_t adc_to_degrees(uint16_t adc_raw, int16_t adc_0, int16_t adc_90)
+static int16_t adc_to_degrees(uint16_t adc_raw, int16_t adc_0, int16_t adc_360)
 {
-    int32_t range = (int32_t)adc_90 - (int32_t)adc_0;
+    int32_t range = (int32_t)adc_360 - (int32_t)adc_0;
     if (range == 0) return 0;
-    return (int16_t)((int32_t)((int16_t)adc_raw - adc_0) * 90 / range);
+    return (int16_t)((int32_t)((int16_t)adc_raw - adc_0) * 360 / range);
 }
 
 static int32_t integral = 0;
@@ -86,8 +86,8 @@ static void PID_ISR(void)
     uint16_t sp_raw = ADCC_GetSingleConversion(SETPOINT);
     uint16_t fb_raw = ADCC_GetSingleConversion(FEEDBACK);
 
-    int16_t sp_deg = adc_to_degrees(sp_raw, SP_ADC_0, SP_ADC_90);
-    int16_t fb_deg = adc_to_degrees(fb_raw, FB_ADC_0, FB_ADC_90);
+    int16_t sp_deg = adc_to_degrees(sp_raw, SP_ADC_0, SP_ADC_360);
+    int16_t fb_deg = adc_to_degrees(fb_raw, FB_ADC_0, FB_ADC_360);
 
     int16_t error = sp_deg - fb_deg;
 

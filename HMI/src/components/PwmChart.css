@@ -1,0 +1,30 @@
+.pwm-chart {
+  display: flex;
+  flex-direction: column;
+  padding: var(--gap-lg);
+  overflow: hidden;
+}
+
+.pwm-chart-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--gap-sm);
+}
+
+.pwm-chart-container {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+
+.pwm-chart-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 80px;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 500;
+}
