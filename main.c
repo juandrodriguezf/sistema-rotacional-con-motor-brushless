@@ -43,32 +43,164 @@
 
 #include "mcc_generated_files/mcc.h"
 
+#define FVR_VOLTAGE     2048
+#define ADC_MAX         1023
+
+#define SP_ADC_0    0
+#define SP_ADC_90   1023
+#define FB_ADC_0    0
+#define FB_ADC_90   1023
+
+#define PWM_MAX         255
+
+#define KP              50
+#define KI              10
+#define KD              0
+
+#define INTEGRAL_MAX    5000
+#define INTEGRAL_MIN    -5000
+
+#define CSV_BUFFER_SIZE 64
+
+static int16_t adc_to_degrees(uint16_t adc_raw, int16_t adc_0, int16_t adc_90)
+{
+    int32_t range = (int32_t)adc_90 - (int32_t)adc_0;
+    if (range == 0) return 0;
+    return (int16_t)((int32_t)((int16_t)adc_raw - adc_0) * 90 / range);
+}
+
+static int32_t integral = 0;
+static int16_t prev_error = 0;
+
+static int16_t tel_setpoint_deg = 0;
+static int16_t tel_feedback_deg = 0;
+static int16_t tel_error = 0;
+static int16_t tel_output = 0;
+static volatile bool tel_ready = false;
+
+static void PID_ISR(void)
+{
+    uint16_t sp_raw = ADCC_GetSingleConversion(SETPOINT);
+    uint16_t fb_raw = ADCC_GetSingleConversion(FEEDBACK);
+
+    int16_t sp_deg = adc_to_degrees(sp_raw, SP_ADC_0, SP_ADC_90);
+    int16_t fb_deg = adc_to_degrees(fb_raw, FB_ADC_0, FB_ADC_90);
+
+    int16_t error = sp_deg - fb_deg;
+
+    integral += error;
+    if (integral > INTEGRAL_MAX) integral = INTEGRAL_MAX;
+    if (integral < INTEGRAL_MIN) integral = INTEGRAL_MIN;
+
+    int16_t derivative = error - prev_error;
+    prev_error = error;
+
+    int32_t output = (int32_t)KP * error + (int32_t)KI * integral + (int32_t)KD * derivative;
+
+    int32_t scaled = output / 100;
+
+    if (scaled > PWM_MAX) scaled = PWM_MAX;
+    if (scaled < -PWM_MAX) scaled = -PWM_MAX;
+
+    int16_t duty = (int16_t)scaled;
+
+    if (duty < 0) {
+        DIR_SetLow();
+        duty = -duty;
+    } else {
+        DIR_SetHigh();
+    }
+
+    if (duty > PWM_MAX) duty = PWM_MAX;
+
+    PWM6_LoadDutyValue((uint16_t)duty);
+
+    tel_setpoint_deg = sp_deg;
+    tel_feedback_deg = fb_deg;
+    tel_error = error;
+    tel_output = (int16_t)scaled;
+    tel_ready = true;
+}
+
+static void int_to_str(int16_t val, char *buf, uint8_t buf_size)
+{
+    uint8_t i = 0;
+    uint8_t start = 0;
+
+    if (val < 0) {
+        buf[i++] = '-';
+        val = -val;
+        start = 1;
+    }
+
+    uint8_t digits[6];
+    uint8_t count = 0;
+
+    if (val == 0) {
+        digits[count++] = 0;
+    } else {
+        while (val > 0 && count < 6) {
+            digits[count++] = val % 10;
+            val /= 10;
+        }
+    }
+
+    for (uint8_t j = 0; j < count; j++) {
+        buf[i++] = digits[count - 1 - j] + '0';
+    }
+
+    buf[i] = '\0';
+}
+
+static void send_csv(void)
+{
+    char buf[CSV_BUFFER_SIZE];
+    uint8_t len = 0;
+
+    char tmp[8];
+
+    int_to_str(tel_setpoint_deg, tmp, sizeof(tmp));
+    for (uint8_t i = 0; tmp[i] != '\0'; i++) buf[len++] = tmp[i];
+    buf[len++] = ',';
+
+    int_to_str(tel_feedback_deg, tmp, sizeof(tmp));
+    for (uint8_t i = 0; tmp[i] != '\0'; i++) buf[len++] = tmp[i];
+    buf[len++] = ',';
+
+    int_to_str(tel_error, tmp, sizeof(tmp));
+    for (uint8_t i = 0; tmp[i] != '\0'; i++) buf[len++] = tmp[i];
+    buf[len++] = ',';
+
+    int_to_str(tel_output, tmp, sizeof(tmp));
+    for (uint8_t i = 0; tmp[i] != '\0'; i++) buf[len++] = tmp[i];
+
+    buf[len++] = '\r';
+    buf[len++] = '\n';
+
+    for (uint8_t i = 0; i < len; i++) {
+        while (!EUSART1_is_tx_ready());
+        EUSART1_Write(buf[i]);
+    }
+}
+
 /*
                          Main application
  */
 void main(void)
 {
-    // initialize the device
     SYSTEM_Initialize();
 
-    // When using interrupts, you need to set the Global and Peripheral Interrupt Enable bits
-    // Use the following macros to:
+    INTERRUPT_GlobalInterruptEnable();
+    INTERRUPT_PeripheralInterruptEnable();
 
-    // Enable the Global Interrupts
-    //INTERRUPT_GlobalInterruptEnable();
-
-    // Enable the Peripheral Interrupts
-    //INTERRUPT_PeripheralInterruptEnable();
-
-    // Disable the Global Interrupts
-    //INTERRUPT_GlobalInterruptDisable();
-
-    // Disable the Peripheral Interrupts
-    //INTERRUPT_PeripheralInterruptDisable();
+    TMR0_SetInterruptHandler(PID_ISR);
 
     while (1)
     {
-        // Add your application code
+        if (tel_ready) {
+            tel_ready = false;
+            send_csv();
+        }
     }
 }
 /**
