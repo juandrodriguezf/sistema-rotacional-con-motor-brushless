@@ -196,6 +196,7 @@ El filtro atenúa la señal de control a ~72% a la frecuencia de Nyquist.
 ### 6.1 Implementación
 
 ```c
+#define PID_SCALE       100
 #define OUTPUT_MAX_DELTA 100
 
 int32_t delta = scaled - prev_scaled;
@@ -216,6 +217,56 @@ Con `OUTPUT_MAX_DELTA = 100`:
 - Cambio máximo por ciclo: 100/255 ≈ 39% del rango
 - Tiempo mínimo para ir de 0 a 255: ~3 ciclos = ~25ms
 - Esto es compatible con el settling time del filtro (6.5ms)
+
+### 6.3 Cambio seguro de dirección
+
+```c
+if (duty_sign != prev_duty_sign && prev_duty_sign != 0) {
+    PWM6_LoadDutyValue(0);        // Paso 1: PWM = 0
+    dir_change_pending = true;    // Paso 2: esperar 1 ciclo (8.33ms)
+    prev_duty_sign = 0;
+    return;
+}
+// En siguiente ciclo:
+if (dir_change_pending) {
+    DIR_SetHigh/Low();            // Paso 3: cambiar DIR
+    dir_change_pending = false;   // Paso 4: restaurar PWM normalmente
+}
+```
+
+Los 8.33ms permiten que el filtro RC (τ=1.3ms) se descargue a ~0.1% y que el driver ZSX11H complete su dead-time interno.
+
+### 6.4 Derivativa sobre medición
+
+En lugar de `derivative = error - prev_error` (que causa derivative kick), se usa:
+
+```c
+derivative = -(fb_deg - prev_fb_deg);
+```
+
+Esto elimina los pulsos espurios cuando el usuario cambia el setpoint abruptamente.
+
+### 6.5 Anti-windup condicional
+
+```c
+if ((scaled < PWM_MAX && scaled > -PWM_MAX) ||
+    (error > 0 && integral < 0) ||
+    (error < 0 && integral > 0)) {
+    integral += error;
+}
+```
+
+Solo acumula integral si el output NO está saturado, o si el error va en dirección de reducir la saturación.
+
+### 6.6 Lectura atómica de ganancias
+
+```c
+INTCONbits.GIE = 0;
+kp = kp_val; ki = ki_val; kd = kd_val;
+INTCONbits.GIE = 1;
+```
+
+PIC16 es arquitectura de 8 bits. Leer un `int16_t` requiere dos accesos a memoria. Sin protección, un cambio de ganancia desde el HMI durante la lectura produce un valor corrupto.
 
 ---
 

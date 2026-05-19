@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useMemo } from 'react';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -11,7 +11,7 @@ import {
   Filler,
 } from 'chart.js';
 import { Line } from 'react-chartjs-2';
-import { Activity } from 'lucide-react';
+import { Activity, Pause, Play } from 'lucide-react';
 import './RealtimeChart.css';
 
 ChartJS.register(
@@ -25,14 +25,97 @@ ChartJS.register(
   Filler
 );
 
-export default function RealtimeChart({ chartData, isConnected, theme }) {
+const stepAnnotationPlugin = {
+  id: 'stepAnnotations',
+  afterDraw(chart) {
+    const events = chart.config.options.plugins.stepAnnotations?.events;
+    if (!events || events.length === 0) return;
+
+    const { ctx, scales, chartArea } = chart;
+    const xScale = scales.x;
+    const yScale = scales.y;
+
+    const labels = chart.data.labels;
+    if (!labels || labels.length === 0) return;
+
+    ctx.save();
+
+    for (const evt of events) {
+      const evtSec = evt.time / 1000;
+      const label = evtSec.toFixed(1);
+
+      let idx = labels.indexOf(label);
+      if (idx === -1) {
+        let bestDist = Infinity;
+        for (let i = 0; i < labels.length; i++) {
+          const d = Math.abs(parseFloat(labels[i]) - evtSec);
+          if (d < bestDist) {
+            bestDist = d;
+            idx = i;
+          }
+        }
+      }
+
+      if (idx < 0 || idx >= labels.length) continue;
+
+      const meta = chart.getDatasetMeta(0);
+      if (!meta.data[idx]) continue;
+
+      const x = meta.data[idx].x;
+
+      if (x < chartArea.left || x > chartArea.right) continue;
+
+      ctx.setLineDash([4, 4]);
+      ctx.strokeStyle = 'rgba(168, 85, 247, 0.5)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(x, chartArea.top);
+      ctx.lineTo(x, chartArea.bottom);
+      ctx.stroke();
+
+      ctx.setLineDash([]);
+
+      const labelY = chartArea.top + 4;
+      const text = `Step ${evt.sp}°`;
+      ctx.font = '600 9px "JetBrains Mono", monospace';
+      const textWidth = ctx.measureText(text).width;
+      const padding = 4;
+      const boxX = x - textWidth / 2 - padding;
+      const boxY = labelY - 2;
+      const boxW = textWidth + padding * 2;
+      const boxH = 16;
+
+      ctx.fillStyle = 'rgba(168, 85, 247, 0.85)';
+      ctx.beginPath();
+      ctx.roundRect(boxX, boxY, boxW, boxH, 3);
+      ctx.fill();
+
+      ctx.fillStyle = '#fff';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, x, boxY + boxH / 2);
+    }
+
+    ctx.restore();
+  },
+};
+
+export default function RealtimeChart({ chartData, stepEvents = [], isConnected, theme, chartPaused, onTogglePause }) {
   const chartRef = useRef(null);
+
+  const annotationEvents = useMemo(() => {
+    if (chartData.length === 0) return [];
+    const chartStart = chartData[0].time;
+    return stepEvents
+      .filter((e) => e.time >= chartStart)
+      .map((e) => ({ time: e.time, sp: e.sp }));
+  }, [stepEvents, chartData]);
 
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart) return;
     chart.update('none');
-  }, [chartData]);
+  }, [chartData, annotationEvents]);
 
   const labels = chartData.map((d) => (d.time / 1000).toFixed(1));
 
@@ -48,10 +131,8 @@ export default function RealtimeChart({ chartData, isConnected, theme }) {
       {
         label: 'Setpoint (Deseado)',
         data: chartData.map((d) => d.sp),
-        borderColor: theme === 'light' ? '#ea580c' : '#fb923c',
-        backgroundColor: theme === 'light'
-          ? 'rgba(234, 88, 12, 0.06)'
-          : 'rgba(251, 146, 60, 0.08)',
+        borderColor: '#ef4444',
+        backgroundColor: 'rgba(239, 68, 68, 0.08)',
         borderWidth: 2,
         borderDash: [6, 4],
         pointRadius: 0,
@@ -84,10 +165,11 @@ export default function RealtimeChart({ chartData, isConnected, theme }) {
       intersect: false,
     },
     plugins: {
+      stepAnnotations: { events: annotationEvents },
       legend: {
         display: true,
-        position: 'top',
-        align: 'end',
+        position: 'bottom',
+        align: 'center',
         labels: {
           color: tickColor,
           font: {
@@ -184,21 +266,35 @@ export default function RealtimeChart({ chartData, isConnected, theme }) {
           <Activity className="icon" size={16} />
           <h3>Respuesta Temporal</h3>
         </div>
-        {isConnected && (
-          <div className="live-badge">
-            <span className="live-dot"></span>
-            LIVE
-          </div>
-        )}
+        <div className="chart-header-badges">
+          {chartPaused && (
+            <div className="paused-badge">PAUSED</div>
+          )}
+          {isConnected && (
+            <div className="live-badge">
+              <span className="live-dot"></span>
+              LIVE
+            </div>
+          )}
+          {isConnected && (
+            <button
+              className="pause-btn"
+              onClick={onTogglePause}
+              title={chartPaused ? 'Reanudar' : 'Pausar'}
+            >
+              {chartPaused ? <Play size={14} /> : <Pause size={14} />}
+            </button>
+          )}
+        </div>
       </div>
 
-      <div className="chart-container">
+      <div className={`chart-container${chartPaused ? ' paused' : ''}`}>
         {chartData.length === 0 ? (
           <div className="chart-empty">
             <p>Esperando datos del sistema...</p>
           </div>
         ) : (
-          <Line ref={chartRef} data={data} options={options} />
+          <Line ref={chartRef} data={data} options={options} plugins={[stepAnnotationPlugin]} />
         )}
       </div>
     </div>

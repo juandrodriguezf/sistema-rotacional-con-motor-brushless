@@ -12,6 +12,12 @@
   margin-bottom: var(--gap-md);
 }
 
+.chart-header-badges {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .live-badge {
   display: inline-flex;
   align-items: center;
@@ -27,6 +33,39 @@
   animation: pulse-glow 1.5s ease-in-out infinite;
 }
 
+.paused-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: var(--orange-400, #fb923c);
+  background: rgba(251, 146, 60, 0.1);
+  border: 1px solid rgba(251, 146, 60, 0.3);
+}
+
+.pause-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color, rgba(148, 163, 184, 0.15));
+  background: var(--bg-elevated, rgba(255, 255, 255, 0.04));
+  color: var(--text-secondary, #94a3b8);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.pause-btn:hover {
+  background: var(--accent, #facc15);
+  color: #000;
+  border-color: var(--accent, #facc15);
+}
+
 .live-dot {
   width: 6px;
   height: 6px;
@@ -39,6 +78,12 @@
   flex: 1;
   min-height: 0;
   position: relative;
+  transition: box-shadow 0.2s ease;
+}
+
+.chart-container.paused {
+  box-shadow: inset 0 0 0 1.5px rgba(251, 146, 60, 0.3);
+  border-radius: 8px;
 }
 
 .chart-empty {

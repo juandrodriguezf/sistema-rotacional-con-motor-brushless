@@ -18,15 +18,19 @@ const EMA_ALPHA = 0.1;
 
 export default function App() {
   const [chartData, setChartData] = useState([]);
+  const [stepEvents, setStepEvents] = useState([]);
   const [latestData, setLatestData] = useState(null);
   const [sampleRate, setSampleRate] = useState(0);
   const [toast, setToast] = useState(null);
   const [theme, setTheme] = useState('dark');
+  const [chartPaused, setChartPaused] = useState(false);
   const dataBufferRef = useRef([]);
   const startTimeRef = useRef(null);
   const lastTimeRef = useRef(null);
   const emaHzRef = useRef(TARGET_HZ);
   const pidParamsRef = useRef({ kp: 50, ki: 10, kd: 0 });
+  const lastStepTimeRef = useRef(null);
+  const chartPausedRef = useRef(false);
 
   const getPidParams = useCallback(() => pidParamsRef.current, []);
 
@@ -55,7 +59,6 @@ export default function App() {
 
     const elapsed = now - startTimeRef.current;
 
-    // Sample rate calculation (EMA smoothed)
     if (lastTimeRef.current !== null) {
       const dt = now - lastTimeRef.current;
       if (dt > 0) {
@@ -75,20 +78,41 @@ export default function App() {
       ctrlk: parsed.ctrlk,
     };
 
-    // Store in full buffer for CSV export
     dataBufferRef.current.push(dataPoint);
 
-    // Update latest for metrics
     setLatestData(dataPoint);
 
-    // Update chart with windowed data
-    setChartData((prev) => {
-      const next = [...prev, dataPoint];
-      if (next.length > MAX_CHART_POINTS) {
-        return next.slice(next.length - MAX_CHART_POINTS);
+    if (!chartPausedRef.current) {
+      setChartData((prev) => {
+        const next = [...prev, dataPoint];
+        if (next.length > MAX_CHART_POINTS) {
+          return next.slice(next.length - MAX_CHART_POINTS);
+        }
+        return next;
+      });
+    }
+
+    if (dataBufferRef.current.length > 12) {
+      const len = dataBufferRef.current.length;
+      const window = 10;
+      const i = len - 1;
+      const iPrev = i - window;
+      const dt = (dataBufferRef.current[i].time - dataBufferRef.current[iPrev].time) / 1000;
+      if (dt > 0) {
+        const delta = Math.abs(dataBufferRef.current[i].sp - dataBufferRef.current[iPrev].sp);
+        const rate = delta / dt;
+        if (delta > 5 && rate > 50) {
+          if (lastStepTimeRef.current === null || (dataBufferRef.current[i].time - lastStepTimeRef.current) > 1000) {
+            lastStepTimeRef.current = dataBufferRef.current[i].time;
+            setStepEvents((prev) => {
+              const next = [...prev, { time: dataBufferRef.current[i].time, sp: dataBufferRef.current[i].sp }];
+              if (next.length > 20) return next.slice(next.length - 20);
+              return next;
+            });
+          }
+        }
       }
-      return next;
-    });
+    }
   }, []);
 
   const { isConnected, portInfo, connect, disconnect, send } = useSerial({
@@ -99,8 +123,10 @@ export default function App() {
     dataBufferRef.current = [];
     startTimeRef.current = null;
     lastTimeRef.current = null;
+    lastStepTimeRef.current = null;
     emaHzRef.current = TARGET_HZ;
     setChartData([]);
+    setStepEvents([]);
     setLatestData(null);
     setSampleRate(0);
 
@@ -139,6 +165,21 @@ export default function App() {
     },
     [send, showToast]
   );
+
+  const handleTogglePause = useCallback(() => {
+    const nextPaused = !chartPausedRef.current;
+    chartPausedRef.current = nextPaused;
+
+    if (!nextPaused) {
+      const buf = dataBufferRef.current;
+      if (buf.length > 0) {
+        const slice = buf.slice(-MAX_CHART_POINTS);
+        setChartData(slice);
+      }
+    }
+
+    setChartPaused(nextPaused);
+  }, []);
 
   // Determine motor direction
   const direction = isConnected && latestData
@@ -209,7 +250,14 @@ export default function App() {
           <div className="charts-grid fade-in" style={{ animationDelay: '0.2s' }}>
             {/* Main angle chart */}
             <div className="chart-main">
-              <RealtimeChart chartData={chartData} isConnected={isConnected} theme={theme} />
+              <RealtimeChart
+                chartData={chartData}
+                stepEvents={stepEvents}
+                isConnected={isConnected}
+                theme={theme}
+                chartPaused={chartPaused}
+                onTogglePause={handleTogglePause}
+              />
             </div>
 
             {/* PWM chart */}
