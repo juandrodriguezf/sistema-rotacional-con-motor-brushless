@@ -133,8 +133,8 @@
 
 .chart-pwm {
   flex: 1;
-  min-height: 120px;
-  max-height: 180px;
+  min-height: 180px;
+  max-height: 320px;
   display: flex;
   flex-direction: column;
 }
@@ -171,7 +171,7 @@
   }
 
   .chart-pwm {
-    min-height: 100px;
-    max-height: 140px;
+    min-height: 150px;
+    max-height: 240px;
   }
 }

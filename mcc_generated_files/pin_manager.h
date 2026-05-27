@@ -65,26 +65,6 @@
 #define PULL_UP_ENABLED      1
 #define PULL_UP_DISABLED     0
 
-// get/set FVR_OUT aliases
-#define FVR_OUT_TRIS                 TRISAbits.TRISA2
-#define FVR_OUT_LAT                  LATAbits.LATA2
-#define FVR_OUT_PORT                 PORTAbits.RA2
-#define FVR_OUT_WPU                  WPUAbits.WPUA2
-#define FVR_OUT_OD                   ODCONAbits.ODCA2
-#define FVR_OUT_ANS                  ANSELAbits.ANSA2
-#define FVR_OUT_SetHigh()            do { LATAbits.LATA2 = 1; } while(0)
-#define FVR_OUT_SetLow()             do { LATAbits.LATA2 = 0; } while(0)
-#define FVR_OUT_Toggle()             do { LATAbits.LATA2 = ~LATAbits.LATA2; } while(0)
-#define FVR_OUT_GetValue()           PORTAbits.RA2
-#define FVR_OUT_SetDigitalInput()    do { TRISAbits.TRISA2 = 1; } while(0)
-#define FVR_OUT_SetDigitalOutput()   do { TRISAbits.TRISA2 = 0; } while(0)
-#define FVR_OUT_SetPullup()          do { WPUAbits.WPUA2 = 1; } while(0)
-#define FVR_OUT_ResetPullup()        do { WPUAbits.WPUA2 = 0; } while(0)
-#define FVR_OUT_SetPushPull()        do { ODCONAbits.ODCA2 = 0; } while(0)
-#define FVR_OUT_SetOpenDrain()       do { ODCONAbits.ODCA2 = 1; } while(0)
-#define FVR_OUT_SetAnalogMode()      do { ANSELAbits.ANSA2 = 1; } while(0)
-#define FVR_OUT_SetDigitalMode()     do { ANSELAbits.ANSA2 = 0; } while(0)
-
 // get/set AUX2 aliases
 #define AUX2_TRIS                 TRISAbits.TRISA4
 #define AUX2_LAT                  LATAbits.LATA4

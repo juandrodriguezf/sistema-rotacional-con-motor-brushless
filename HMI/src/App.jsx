@@ -13,8 +13,6 @@ import PidAnalyzer from './components/PidAnalyzer';
 import './App.css';
 
 const MAX_CHART_POINTS = 600;
-const TARGET_HZ = 120;
-const EMA_ALPHA = 0.1;
 
 export default function App() {
   const [chartData, setChartData] = useState([]);
@@ -26,8 +24,8 @@ export default function App() {
   const [chartPaused, setChartPaused] = useState(false);
   const dataBufferRef = useRef([]);
   const startTimeRef = useRef(null);
-  const lastTimeRef = useRef(null);
-  const emaHzRef = useRef(TARGET_HZ);
+  const sampleCountRef = useRef(0);
+  const rateIntervalRef = useRef(null);
   const pidParamsRef = useRef({ kp: 50, ki: 10, kd: 0 });
   const lastStepTimeRef = useRef(null);
   const chartPausedRef = useRef(false);
@@ -41,6 +39,14 @@ export default function App() {
 
   const toggleTheme = useCallback(() => {
     setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (rateIntervalRef.current) {
+        clearInterval(rateIntervalRef.current);
+      }
+    };
   }, []);
 
   const showToast = useCallback((message, type = 'info') => {
@@ -59,15 +65,7 @@ export default function App() {
 
     const elapsed = now - startTimeRef.current;
 
-    if (lastTimeRef.current !== null) {
-      const dt = now - lastTimeRef.current;
-      if (dt > 0) {
-        const instantHz = 1000 / dt;
-        emaHzRef.current = EMA_ALPHA * instantHz + (1 - EMA_ALPHA) * emaHzRef.current;
-        setSampleRate(Math.round(emaHzRef.current));
-      }
-    }
-    lastTimeRef.current = now;
+    sampleCountRef.current++;
 
     const dataPoint = {
       time: elapsed,
@@ -122,20 +120,30 @@ export default function App() {
   const handleConnect = useCallback(async () => {
     dataBufferRef.current = [];
     startTimeRef.current = null;
-    lastTimeRef.current = null;
     lastStepTimeRef.current = null;
-    emaHzRef.current = TARGET_HZ;
     setChartData([]);
     setStepEvents([]);
     setLatestData(null);
     setSampleRate(0);
+    sampleCountRef.current = 0;
 
     await connect();
     showToast('Puerto serial conectado', 'success');
+
+    rateIntervalRef.current = setInterval(() => {
+      setSampleRate(sampleCountRef.current);
+      sampleCountRef.current = 0;
+    }, 1000);
   }, [connect, showToast]);
 
   const handleDisconnect = useCallback(async () => {
     await disconnect();
+
+    if (rateIntervalRef.current) {
+      clearInterval(rateIntervalRef.current);
+      rateIntervalRef.current = null;
+    }
+    sampleCountRef.current = 0;
 
     if (dataBufferRef.current.length > 0) {
       downloadCSV(dataBufferRef.current);

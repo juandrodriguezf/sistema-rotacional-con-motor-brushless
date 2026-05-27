@@ -44,14 +44,12 @@
 #include "mcc_generated_files/mcc.h"
 #include <stdlib.h>
 
-#define FVR_VOLTAGE     2048
 #define VDD_MV          5000
-#define ADC_MAX         1023
 
-#define SP_ADC_0    0
-#define SP_ADC_360  1023
-#define FB_ADC_0    0
-#define FB_ADC_360  1023
+#define SP_ADC_0    4061
+#define SP_ADC_360  0
+#define FB_ADC_0    4057
+#define FB_ADC_360  0
 
 #define PWM_MAX         255
 
@@ -62,8 +60,11 @@
 
 #define OUTPUT_MAX_DELTA 100
 
-#define INTEGRAL_MAX    5000
-#define INTEGRAL_MIN    -5000
+#define SP_MIN_DEG      10
+#define SP_MAX_DEG      350
+
+#define INTEGRAL_MAX    800
+#define INTEGRAL_MIN    -800
 
 #define CSV_BUFFER_SIZE 64
 #define RX_BUFFER_SIZE  16
@@ -108,6 +109,9 @@ static void PID_ISR(void)
     int16_t sp_deg = adc_to_degrees(sp_raw, SP_ADC_0, SP_ADC_360);
     int16_t fb_deg = adc_to_degrees(fb_raw, FB_ADC_0, FB_ADC_360);
 
+    if (sp_deg < SP_MIN_DEG) sp_deg = SP_MIN_DEG;
+    if (sp_deg > SP_MAX_DEG) sp_deg = SP_MAX_DEG;
+
     int16_t error = sp_deg - fb_deg;
 
     int16_t derivative = -(fb_deg - prev_fb_deg);
@@ -126,9 +130,7 @@ static void PID_ISR(void)
 
     int16_t duty_sign = (scaled > 0) ? 1 : (scaled < 0) ? -1 : 0;
 
-    if ((scaled < PWM_MAX && scaled > -PWM_MAX) ||
-        (error > 0 && integral < 0) ||
-        (error < 0 && integral > 0)) {
+    if (!((scaled >= PWM_MAX && error > 0) || (scaled <= -PWM_MAX && error < 0))) {
         integral += error;
         if (integral > INTEGRAL_MAX) integral = INTEGRAL_MAX;
         if (integral < INTEGRAL_MIN) integral = INTEGRAL_MIN;
@@ -255,9 +257,7 @@ void ProcessHmiCommand(char *cmd)
 void main(void)
 {
     SYSTEM_Initialize();
-
-    while(!FVR_IsOutputReady());
-
+    ADREF = 0x00;
     INTERRUPT_GlobalInterruptEnable();
     INTERRUPT_PeripheralInterruptEnable();
 

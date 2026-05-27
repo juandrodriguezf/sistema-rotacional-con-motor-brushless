@@ -49,6 +49,7 @@ D<valor>\n   → Kd (0-100)
 - **Anti-windup**: Condicional (clamping)
 - **Rate limiting**: Δ max = 100 por ciclo (~39% del rango)
 - **Cambio de dirección**: Dead-time de 1 ciclo (8.33ms) con PWM=0
+- **Sample rate**: Contador de líneas por segundo (no EMA suavizado)
 
 ## Componentes
 

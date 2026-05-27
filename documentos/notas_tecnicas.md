@@ -27,21 +27,23 @@ Este documento contiene el análisis técnico, especificaciones de datasheets, t
 | Consumo del módulo | 40-46 µA (típico a 3V) |
 | VDD mínimo | 2.5V (1x/2x), 4.75V (4x) |
 
-**Uso actual:** FVR a 2.048V como referencia ADC Y alimentación de potenciómetros.
+**Uso actual:** FVR a 2.048V solo como alimentación de potenciómetros (la referencia ADC se cambió a VDD vía `ADREF=0x00`).
 
-**Observación:** El datasheet no especifica corriente máxima de salida del FVR. Está diseñado como referencia para circuitos de alta impedancia (ADC, comparadores, DAC). En este diseño alimenta dos potenciómetros de 10kΩ que consumen ~205 µA cada uno (410 µA total). Este es un uso no convencional pero funcional si las lecturas ADC son estables.
+**Observación:** El datasheet no especifica corriente máxima de salida del FVR. Está diseñado como referencia para circuitos de alta impedancia (ADC, comparadores, DAC). En este diseño alimenta dos potenciómetros de 10kΩ que consumen ~205 µA cada uno (410 µA total).
 
-**Riesgo potencial:** Si la FVR no puede entregar 410 µA, el voltaje podría caer por debajo de 2.048V, causando errores de lectura. Sin embargo, al ser un sistema ratiométrico (FVR = VREF+ del ADC), cualquier desviación se cancela automáticamente en la conversión.
+**Riesgo potencial:** Si la FVR no puede entregar 410 µA, el voltaje de alimentación de los pots puede caer. Ya no hay compensación ratiométrica porque la referencia ADC es VDD (5V), no FVR. Una caída en FVR ahora se traduce directamente en error de medición. Se recomienda monitorear la estabilidad de las lecturas ADC.
 
 ### 1.3 ADC
 
 | Parámetro | Valor |
 |-----------|-------|
 | Resolución | 10 bits (0-1023) |
-| Referencia positiva | FVR (2.048V) |
+| Referencia positiva | **VDD (5V)** — `ADREF=0x00` en firmware (override MCC) |
 | Referencia negativa | VSS (GND) |
 | Clock | FOSC/32 = 1 MHz |
 | Modo | Basic (una conversión a la vez) |
+
+**Nota:** Originalmente configurado con FVR 2.048V como referencia positiva en MCC. `main.c` sobrescribe con `ADREF=0x00` para usar VDD (5V). Esto reduce la resolución efectiva (el rango del potenciómetro 0-2.048V se mapea a ~0-419 de 1023) pero evita problemas de estabilidad del FVR al suministrar corriente a los pots.
 
 ---
 
@@ -296,27 +298,28 @@ Para medición precisa, se requiere un multímetro u osciloscopio en la salida d
 
 ## 8. Observaciones de Diseño
 
-### 8.1 Sistema ratiométrico
+### 8.1 Sistema no-ratiométrico (cambio en firmware)
 
-Al usar FVR tanto como referencia del ADC como alimentación de los potenciómetros:
+Originalmente el sistema era ratiométrico (FVR = ref. ADC + alimentación pots). Con `ADREF=0x00` la referencia ADC es VDD (5V):
 
-- Si FVR varía (por temperatura, carga, etc.), **ambos varían proporcionalmente**
-- La conversión `adc_raw → grados` se mantiene correcta
-- Eliminación natural de errores por variación de referencia
+- FVR alimenta los pots (0-2.048V) pero el ADC mide contra VDD (0-5V)
+- Una variación en FVR **ya no se cancela** en la conversión
+- Rango útil del ADC: ~0-419 de 1023 (wasted resolution)
+- La conversión `grados = (adc_raw - ADC_0) * 360 / (ADC_360 - ADC_0)` sigue siendo lineal porque tanto ADC_0 como ADC_360 se miden con la misma referencia VDD
 
-### 8.2 FVR alimentando potenciómetros
+### 8.2 FVR alimentando potenciómetros (solo alimentación)
 
 **Pros:**
-- Sistema ratiométrico completo
-- Inmune a variaciones de VDD
-- Máxima resolución ADC para el rango del pote
+- Sigue siendo útil como fuente de 2.048V limpia para los pots
+- Aísla la referencia de los pots del ruido de VDD digital
 
 **Contras:**
+- Ya no hay compensación ratiométrica
+- Resolución efectiva reducida (~41% del rango ADC)
 - Uso no convencional del FVR (diseñado para alta impedancia)
 - Corriente total de pots (410 µA) excede el consumo del módulo FVR (46 µA)
-- Si el FVR no puede entregar esta corriente, el voltaje podría caer
 
-**Verificación práctica:** Si las lecturas ADC son estables y consistentes, el diseño funciona.
+**Verificación práctica:** Si las lecturas ADC son estables, el diseño funciona. Se perdió la inmunidad a variaciones de VDD.
 
 ### 8.3 PWM 31.25kHz vs 20kHz del driver
 
@@ -334,7 +337,7 @@ No es un problema porque el PWM se filtra a DC antes de llegar al driver. La fre
 |-----------|-------|
 | MCU | PIC16F18426 @ 32MHz |
 | PID frequency | 120 Hz (Ts = 8.33ms) |
-| ADC resolution | 10 bits, FVR 2.048V |
+| ADC resolution | 10 bits, VDD 5V (`ADREF=0x00`) |
 | PWM frequency | 31.25 kHz |
 | PWM resolution | 8 bits (0-255) |
 | Filtro RC | τ = 1.3ms, fc = 122Hz |

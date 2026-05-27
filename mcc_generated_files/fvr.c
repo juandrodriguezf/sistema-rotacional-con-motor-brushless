@@ -57,8 +57,8 @@
 
 void FVR_Initialize(void)
 {
-    // CDAFVR off; FVREN enabled; TSRNG Lo_range; ADFVR 2x; TSEN disabled; 
-    FVRCON = 0x82;
+    // CDAFVR 2x (2.048V OUT); FVREN enabled; TSRNG Lo_range; ADFVR 2x; TSEN disabled;
+    FVRCON = 0xA2;   // Activa salida en RA2 a 2.048V
 }
 
 bool FVR_IsOutputReady(void)

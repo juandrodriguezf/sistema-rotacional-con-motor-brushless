@@ -53,12 +53,12 @@ m3.X/
 | RC1 | DIR → ZSX11H DIR (sentido de giro)       |
 | RC4 | EUSART TX                                 |
 | RC5 | EUSART RX                                 |
-| RA2 | FVR 2.048V (referencia ADC)               |
+| RA2 | FVR 2.048V (alimentación potenciómetros)   |
 
 ### Configuracion
 
 - **Clock:** 32 MHz (HFINTOSC)
-- **ADC:** 10-bit, referencia FVR 2.048V
+- **ADC:** 10-bit, referencia VDD (5V) mediante `ADREF=0x00`
 - **PWM6:** 31.25 kHz, 8-bit duty cycle
 - **TMR0:** 16-bit, prescaler 1:256, ISR cada 8.33 ms (120 Hz)
 - **UART:** 115200 baud, 8N1
@@ -68,15 +68,16 @@ m3.X/
 **Telemetria (PIC → HMI):**
 
 ```
-sp_deg,fb_deg,error,output\r\n
+sp_deg,fb_deg,error,pwm_output,ctrlk_mv\r\n
 ```
 
-| Campo      | Descripcion                      |
-| ---------- | -------------------------------- |
-| `sp_deg` | Setpoint en grados (0-90)        |
-| `fb_deg` | Feedback en grados (0-90)        |
-| `error`  | Diferencia sp - fb               |
-| `output` | Salida PID escalada (-255 a 255) |
+| Campo        | Descripcion                            |
+| ------------ | -------------------------------------- |
+| `sp_deg`   | Setpoint en grados (0-360)             |
+| `fb_deg`   | Feedback en grados (0-360)             |
+| `error`    | Diferencia sp - fb (±360)              |
+| `pwm_output` | Salida PID escalada (-255 a 255)     |
+| `ctrlk_mv`   | Voltaje estimado en CTRLK (0-5000 mV) |
 
 **Comandos (HMI → PIC):**
 
@@ -93,10 +94,10 @@ Ejemplo: `P50\n` establece Kp = 50
 Los potenciometros requieren calibracion para mapear los valores ADC a grados. El programa en `calibracion/main.c` determina los 4 valores de referencia:
 
 ```c
-#define SP_ADC_0    0     // Reemplazar con valor calibrado
-#define SP_ADC_90   1023  // Reemplazar con valor calibrado
-#define FB_ADC_0    0     // Reemplazar con valor calibrado
-#define FB_ADC_90   1023  // Reemplazar con valor calibrado
+#define SP_ADC_0    4061  // ADC en 0° (invertido)
+#define SP_ADC_360  0     // ADC en 360° (invertido)
+#define FB_ADC_0    4057  // ADC en 0° (invertido)
+#define FB_ADC_360  0     // ADC en 360° (invertido)
 ```
 
 Ver `calibracion/README.md` para el procedimiento.
@@ -109,9 +110,11 @@ El controlador PID se ejecuta en la interrupcion de TMR0 a 120 Hz:
 output = (Kp * error + Ki * integral + Kd * derivativo) / 100
 ```
 
-- **Anti-windup:** Saturacion de integral en [-5000, 5000]
+- **Anti-windup:** Integral limitada a ±800 con integración condicional (solo acumula si output no saturado en la dirección del error)
+- **Setpoint limits:** Recortado a [10°, 350°] para evitar inversión de giro en extremos
 - **Direccion:** Pin DIR del ZSX11H, determinado por el signo de la salida
 - **PWM:** Duty absoluto (0-255) enviado al pin PWM del ZSX11H
+- **Rate limiting:** Cambio máximo de output = 100 por ciclo (~39% del rango)
 - **Motor:** 57BLDC75E-20730 (brushless) controlado por el driver ZSX11H
 
 ## HMI (Dashboard Web)
@@ -159,8 +162,8 @@ Time_ms,Setpoint_Deg,Feedback_Deg,Error,PWM_Output
 
 1. **Calibrar potenciometros:**
 
-   - Programar `calibracion/main.c` en el PIC
-   - Seguir instrucciones por terminal serial (115200 baud)
+   - Programar `calibracion/calib_pote.c` en el PIC
+   - Seguir instrucciones por terminal serial (115200 baud): girar cada pote a 0° y 360°
    - Copiar los 4 valores de calibracion en `main.c`
 2. **Programar firmware:**
 

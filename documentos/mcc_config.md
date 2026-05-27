@@ -35,7 +35,7 @@
 | Enable ADC         | Enabled         |
 | Operating Mode     | Basic           |
 | Result Alignment   | Right Justified |
-| Positive Reference | FVR             |
+| Positive Reference | ~~FVR~~ VDD (ver nota) |
 | Negative Reference | VSS             |
 | ADC Clock          | FOSC/32         |
 | TAD                | 1 µs           |
@@ -46,6 +46,8 @@
 | Burst Average      | Disabled        |
 | Auto Trigger       | Disabled        |
 | ADC Interrupt      | Disabled        |
+
+> **Nota:** En `main.c` se sobrescribe la referencia positiva a VDD mediante `ADREF = 0x00`. MCC genera FVR como referencia predeterminada, pero el firmware cambia a VDD post-inicialización para evitar dependencia de la corriente de salida del FVR.
 
 ---
 
