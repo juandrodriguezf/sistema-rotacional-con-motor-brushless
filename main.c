@@ -59,6 +59,7 @@
 #define KD_MAX          100
 
 #define OUTPUT_MAX_DELTA 100
+#define DIR_HYSTERESIS   10
 
 #define SP_MIN_DEG      10
 #define SP_MAX_DEG      350
@@ -67,7 +68,7 @@
 #define INTEGRAL_MIN    -800
 
 #define CSV_BUFFER_SIZE 64
-#define RX_BUFFER_SIZE  16
+#define RX_BUFFER_SIZE  32
 
 volatile int16_t kp_val = 50;
 volatile int16_t ki_val = 10;
@@ -128,7 +129,9 @@ static void PID_ISR(void)
     if (scaled > PWM_MAX) scaled = PWM_MAX;
     if (scaled < -PWM_MAX) scaled = -PWM_MAX;
 
-    int16_t duty_sign = (scaled > 0) ? 1 : (scaled < 0) ? -1 : 0;
+    int16_t duty_abs = (scaled > 0) ? (int16_t)scaled : (int16_t)(-scaled);
+    int16_t duty_sign = (scaled > DIR_HYSTERESIS) ? 1 :
+                        (scaled < -DIR_HYSTERESIS) ? -1 : 0;
 
     if (!((scaled >= PWM_MAX && error > 0) || (scaled <= -PWM_MAX && error < 0))) {
         integral += error;
@@ -243,12 +246,14 @@ void ProcessHmiCommand(char *cmd)
     char type = cmd[0];
     int16_t val = (int16_t)atoi(&cmd[1]);
 
+    INTCONbits.GIE = 0;
     switch(type) {
         case 'P': if (val >= 0 && val <= KP_MAX) kp_val = val; break;
         case 'I': if (val >= 0 && val <= KI_MAX) ki_val = val; break;
         case 'D': if (val >= 0 && val <= KD_MAX) kd_val = val; break;
         default: break;
     }
+    INTCONbits.GIE = 1;
 }
 
 /*
@@ -268,12 +273,7 @@ void main(void)
 
     while (1)
     {
-        if (tel_ready) {
-            tel_ready = false;
-            send_csv();
-        }
-
-        if (EUSART1_is_rx_ready()) {
+        while (EUSART1_is_rx_ready()) {
             char c = EUSART1_Read();
             
             if (c == '\n' || c == '\r') {
@@ -287,6 +287,11 @@ void main(void)
                     rx_buffer[rx_idx++] = c;
                 }
             }
+        }
+
+        if (tel_ready) {
+            tel_ready = false;
+            send_csv();
         }
     }
 }
