@@ -67,10 +67,13 @@
 #define INTEGRAL_MAX    800
 #define INTEGRAL_MIN    -800
 
+#define ERROR_DEADBAND   2
+#define PWM_MIN          40
+
 #define CSV_BUFFER_SIZE 64
 #define RX_BUFFER_SIZE  32
 
-volatile int16_t kp_val = 50;
+volatile int16_t kp_val = 30;
 volatile int16_t ki_val = 10;
 volatile int16_t kd_val = 0;
 
@@ -79,6 +82,8 @@ static int16_t prev_error = 0;
 static int32_t prev_scaled = 0;
 static int16_t prev_fb_deg = 0;
 static int16_t prev_duty_sign = 0;
+static int16_t pending_duty_sign = 0;
+static int16_t last_dir = 0;
 static bool dir_change_pending = false;
 
 static volatile int16_t tel_setpoint_deg = 0;
@@ -98,11 +103,9 @@ static int16_t adc_to_degrees(uint16_t adc_raw, int16_t adc_0, int16_t adc_360)
 static void PID_ISR(void)
 {
     int16_t kp, ki, kd;
-    INTCONbits.GIE = 0;
     kp = kp_val;
     ki = ki_val;
     kd = kd_val;
-    INTCONbits.GIE = 1;
 
     uint16_t sp_raw = ADCC_GetSingleConversion(SETPOINT);
     uint16_t fb_raw = ADCC_GetSingleConversion(FEEDBACK);
@@ -114,6 +117,21 @@ static void PID_ISR(void)
     if (sp_deg > SP_MAX_DEG) sp_deg = SP_MAX_DEG;
 
     int16_t error = sp_deg - fb_deg;
+
+    if (error > -ERROR_DEADBAND && error < ERROR_DEADBAND) {
+        integral = 0;
+        prev_fb_deg = fb_deg;
+        prev_error = error;
+        dir_change_pending = false;
+        PWM6_LoadDutyValue(0);
+        tel_setpoint_deg = sp_deg;
+        tel_feedback_deg = fb_deg;
+        tel_error = error;
+        tel_output = 0;
+        tel_ctrlk_mv = 0;
+        tel_ready = true;
+        return;
+    }
 
     int16_t derivative = -(fb_deg - prev_fb_deg);
     prev_fb_deg = fb_deg;
@@ -142,12 +160,13 @@ static void PID_ISR(void)
     prev_scaled = scaled;
 
     if (dir_change_pending) {
-        if (duty_sign > 0) DIR_SetHigh();
-        else if (duty_sign < 0) DIR_SetLow();
+        if (pending_duty_sign > 0) DIR_SetHigh();
+        else if (pending_duty_sign < 0) DIR_SetLow();
         dir_change_pending = false;
-    } else if (duty_sign != prev_duty_sign && prev_duty_sign != 0) {
+    } else if (duty_sign != 0 && last_dir != 0 && duty_sign != last_dir) {
         PWM6_LoadDutyValue(0);
         dir_change_pending = true;
+        pending_duty_sign = duty_sign;
         prev_duty_sign = 0;
 
         tel_setpoint_deg = sp_deg;
@@ -160,10 +179,14 @@ static void PID_ISR(void)
     }
 
     prev_duty_sign = duty_sign;
+    if (duty_sign != 0) last_dir = duty_sign;
 
     int16_t duty = (int16_t)scaled;
     if (duty < 0) {
         duty = -duty;
+    }
+    if (duty > 0 && duty < PWM_MIN) {
+        duty = PWM_MIN;
     }
 
     PWM6_LoadDutyValue((uint16_t)duty);
@@ -206,39 +229,39 @@ static void int_to_str(int16_t val, char *buf, uint8_t buf_size)
     buf[i] = '\0';
 }
 
-static void send_csv(void)
-{
-    char buf[CSV_BUFFER_SIZE];
-    uint8_t len = 0;
+static char tx_buf[CSV_BUFFER_SIZE];
+static uint8_t tx_len = 0;
+static uint8_t tx_idx = 0;
 
+static void csv_prepare(void)
+{
+    uint8_t len = 0;
     char tmp[8];
 
     int_to_str(tel_setpoint_deg, tmp, sizeof(tmp));
-    for (uint8_t i = 0; tmp[i] != '\0'; i++) buf[len++] = tmp[i];
-    buf[len++] = ',';
+    for (uint8_t i = 0; tmp[i] != '\0'; i++) tx_buf[len++] = tmp[i];
+    tx_buf[len++] = ',';
 
     int_to_str(tel_feedback_deg, tmp, sizeof(tmp));
-    for (uint8_t i = 0; tmp[i] != '\0'; i++) buf[len++] = tmp[i];
-    buf[len++] = ',';
+    for (uint8_t i = 0; tmp[i] != '\0'; i++) tx_buf[len++] = tmp[i];
+    tx_buf[len++] = ',';
 
     int_to_str(tel_error, tmp, sizeof(tmp));
-    for (uint8_t i = 0; tmp[i] != '\0'; i++) buf[len++] = tmp[i];
-    buf[len++] = ',';
+    for (uint8_t i = 0; tmp[i] != '\0'; i++) tx_buf[len++] = tmp[i];
+    tx_buf[len++] = ',';
 
     int_to_str(tel_output, tmp, sizeof(tmp));
-    for (uint8_t i = 0; tmp[i] != '\0'; i++) buf[len++] = tmp[i];
-    buf[len++] = ',';
+    for (uint8_t i = 0; tmp[i] != '\0'; i++) tx_buf[len++] = tmp[i];
+    tx_buf[len++] = ',';
 
     int_to_str(tel_ctrlk_mv, tmp, sizeof(tmp));
-    for (uint8_t i = 0; tmp[i] != '\0'; i++) buf[len++] = tmp[i];
+    for (uint8_t i = 0; tmp[i] != '\0'; i++) tx_buf[len++] = tmp[i];
 
-    buf[len++] = '\r';
-    buf[len++] = '\n';
+    tx_buf[len++] = '\r';
+    tx_buf[len++] = '\n';
 
-    for (uint8_t i = 0; i < len; i++) {
-        while (!EUSART1_is_tx_ready());
-        EUSART1_Write(buf[i]);
-    }
+    tx_len = len;
+    tx_idx = 0;
 }
 
 void ProcessHmiCommand(char *cmd)
@@ -270,11 +293,13 @@ void main(void)
 
     char rx_buffer[RX_BUFFER_SIZE];
     uint8_t rx_idx = 0;
+    uint8_t rx_silence = 0;
 
     while (1)
     {
         while (EUSART1_is_rx_ready()) {
             char c = EUSART1_Read();
+            rx_silence = 0;
             
             if (c == '\n' || c == '\r') {
                 if (rx_idx > 0) {
@@ -289,9 +314,23 @@ void main(void)
             }
         }
 
+        if (rx_idx > 0) {
+            rx_silence++;
+            if (rx_silence > 6) {
+                rx_idx = 0;
+                rx_silence = 0;
+            }
+        }
+
         if (tel_ready) {
             tel_ready = false;
-            send_csv();
+            csv_prepare();
+        }
+
+        if (tx_idx < tx_len) {
+            if (EUSART1_is_tx_ready()) {
+                EUSART1_Write(tx_buf[tx_idx++]);
+            }
         }
     }
 }

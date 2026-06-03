@@ -72,3 +72,43 @@ input[type="range"]:disabled {
   width: 100%;
   margin-top: var(--gap-sm);
 }
+
+.direction-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap-md);
+}
+
+.direction-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.dir-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-sm);
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.dir-toggle.forward {
+  background: var(--green-500);
+  color: #fff;
+}
+
+.dir-toggle.reverse {
+  background: var(--orange-500);
+  color: #fff;
+}
+
+.dir-toggle:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}

@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { Sliders, Send } from 'lucide-react';
+import { Sliders, Send, ArrowRightLeft } from 'lucide-react';
 import './PidTuner.css';
 
 export default function PidTuner({ isConnected, onSend }) {
-  const [kp, setKp] = useState(50);
+  const [kp, setKp] = useState(30);
   const [ki, setKi] = useState(10);
   const [kd, setKd] = useState(0);
+  const [forward, setForward] = useState(true);
 
   const handleSend = (param, value) => {
     if (!isConnected) return;
@@ -18,6 +19,12 @@ export default function PidTuner({ isConnected, onSend }) {
     onSend(`P${kp}\n`);
     setTimeout(() => onSend(`I${ki}\n`), 50);
     setTimeout(() => onSend(`D${kd}\n`), 100);
+  };
+
+  const handleToggleDirection = () => {
+    const newDir = !forward;
+    setForward(newDir);
+    onSend(`F${newDir ? '1' : '0'}\n`);
   };
 
   const params = [
@@ -95,6 +102,18 @@ export default function PidTuner({ isConnected, onSend }) {
             </div>
           </div>
         ))}
+      </div>
+
+      <div className="direction-row">
+        <span className="direction-label">Dirección</span>
+        <button
+          className={`btn dir-toggle ${forward ? 'forward' : 'reverse'}`}
+          onClick={handleToggleDirection}
+          disabled={!isConnected}
+        >
+          <ArrowRightLeft size={14} />
+          {forward ? 'Adelante' : 'Reversa'}
+        </button>
       </div>
 
       <button

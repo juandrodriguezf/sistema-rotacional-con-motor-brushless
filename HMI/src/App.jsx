@@ -26,7 +26,7 @@ export default function App() {
   const startTimeRef = useRef(null);
   const sampleCountRef = useRef(0);
   const rateIntervalRef = useRef(null);
-  const pidParamsRef = useRef({ kp: 50, ki: 10, kd: 0 });
+  const pidParamsRef = useRef({ kp: 30, ki: 10, kd: 0 });
   const lastStepTimeRef = useRef(null);
   const chartPausedRef = useRef(false);
 
