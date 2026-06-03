@@ -51,7 +51,7 @@
 #define FB_ADC_0    4057
 #define FB_ADC_360  0
 
-#define PWM_MAX         255
+#define PWM_MAX         120
 
 #define PID_SCALE       100
 #define KP_MAX          200
